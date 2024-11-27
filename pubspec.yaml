@@ -1,0 +1,19 @@
+name: plasma_testnet_simulator
+description: Launches configurable testnets on DigitalOcean, captures results, and presents them over HTTP API.
+
+publish_to: 'none'
+
+version: 0.1.0
+
+environment:
+  sdk: ^3.0.0
+
+dependencies:
+  fixnum: ^1.1.0
+  rxdart: ^0.28.0
+  logging: ^1.3.0
+  http: ^1.2.2
+  plasma_protobuf: ^0.1.5
+  grpc: ^4.0.1
+  fast_base58: ^0.2.1
+dev_dependencies:
