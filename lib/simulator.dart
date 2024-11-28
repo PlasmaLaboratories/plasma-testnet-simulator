@@ -60,7 +60,7 @@ class Simulator {
       status = runningStatus;
       final recordsSub = recordsStream(nodes).listen(
         (record) {
-          log.info(
+          log.fine(
               "Recording block id=${record.blockId.show} droplet=${record.dropletId}");
           adoptionRecords.add(record);
         },
@@ -72,7 +72,7 @@ class Simulator {
       log.info("Running simulation for $duration");
       await Future.delayed(duration);
       await recordsSub.cancel();
-      blockRecords = await AdoptionRecord.blockRecords(adoptionRecords, relays);
+      blockRecords = await AdoptionRecord.blockRecords(adoptionRecords, nodes);
       status = SimulationStatus_Completed();
       log.info(
           "Mission complete. The simulation server will stay alive until manually stopped. View the results at http://localhost:8080/status");

@@ -25,13 +25,12 @@ class AdoptionRecord {
   }
 
   static Future<List<BlockRecord>> blockRecords(
-      List<AdoptionRecord> adoptionRecords, List<NodeDroplet> relays) async {
+      List<AdoptionRecord> adoptionRecords, List<NodeDroplet> nodes) async {
     final adoptees = <BlockId, String>{};
     for (final adoptionRecords in adoptionRecords) {
       adoptees[adoptionRecords.blockId] = adoptionRecords.dropletId;
     }
-    final clients =
-        Map.fromEntries(relays.map((r) => MapEntry(r.id, r.client)));
+    final clients = Map.fromEntries(nodes.map((r) => MapEntry(r.id, r.client)));
     final blockRecords =
         await Stream.fromIterable(adoptees.entries).asyncMap((entry) async {
       final client = clients[entry.value]!;
