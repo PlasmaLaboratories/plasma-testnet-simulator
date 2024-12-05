@@ -33,10 +33,7 @@ class Simulator {
 
   Future<void> run() async {
     final genesisTime = DateTime.now()
-        .add(Duration(seconds: 16) *
-            relayCount) // VM creation time; relays created sequentially in order to capture IP address for peers
-        .add(Duration(seconds: 150)) // Relay Time-to-ready
-        .add(Duration(seconds: 136)); // Stakers created in parallel
+        .add(Duration(minutes: 3)); // Give some time for nodes to launch
     final genesisSettings =
         GenesisSettings(timestamp: genesisTime, stakerCount: stakerCount);
     final server = SimulatorHttpServer(
@@ -58,6 +55,12 @@ class Simulator {
       final stakers =
           await launchStakers(simulationId, genesisSettings, relays);
       nodes.addAll(stakers);
+      log.info("Awaiting blockchain API ready");
+      await Future.wait(nodes.map((node) => retryableFuture(
+            () => node.client.fetchBlockIdAtHeight(
+                FetchBlockIdAtHeightReq(height: Int64(1))),
+            retries: 60 * 5,
+          )));
       log.info("Waiting until genesis");
       await Future.delayed(genesisTime
           .subtract(const Duration(seconds: 10))
@@ -77,6 +80,7 @@ class Simulator {
       );
       log.info("Running simulation for $duration");
       await Future.delayed(duration);
+      log.info("Duration elapsed. Collecting results.");
       await recordsSub.cancel();
       blockRecords = await AdoptionRecord.blockRecords(adoptionRecords, nodes);
       status = SimulationStatus_Completed();
@@ -116,14 +120,6 @@ class Simulator {
                   -1,
                   ["${seedVm.ip}:9085"],
                 ).then(containers.add)));
-      }
-      log.info("Awaiting blockchain API ready");
-      for (final container in containers) {
-        await retryableFuture(
-          () => container.client
-              .fetchBlockIdAtHeight(FetchBlockIdAtHeightReq(height: Int64(1))),
-          retries: 60 * 5,
-        );
       }
     } catch (e, s) {
       log.severe("Failed to launch relays", e, s);
