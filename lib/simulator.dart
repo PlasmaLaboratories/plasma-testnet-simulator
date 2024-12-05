@@ -2,8 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:fixnum/fixnum.dart';
+import 'package:googleapis_auth/auth_io.dart';
 import 'package:plasma_protobuf/plasma_protobuf.dart';
-import 'package:plasma_testnet_simulator/droplets.dart';
+import 'package:plasma_testnet_simulator/vms.dart';
 import 'package:plasma_testnet_simulator/log.dart';
 import 'package:plasma_testnet_simulator/simulation_record.dart';
 import 'package:rxdart/rxdart.dart';
@@ -15,17 +16,20 @@ class Simulator {
   final int stakerCount;
   final int relayCount;
   final Duration duration;
-  final String digitalOceanToken;
+  final AuthClient gcpClient;
+  final String gcpProject;
   SimulationStatus status = SimulationStatus_Initializing();
   List<AdoptionRecord> adoptionRecords = [];
   List<BlockRecord> blockRecords = [];
   List<TransactionRecord> transactionRecords = [];
 
-  Simulator(
-      {required this.stakerCount,
-      required this.relayCount,
-      required this.duration,
-      required this.digitalOceanToken});
+  Simulator({
+    required this.stakerCount,
+    required this.relayCount,
+    required this.duration,
+    required this.gcpClient,
+    required this.gcpProject,
+  });
 
   Future<void> run() async {
     final genesisTime = DateTime.now()
@@ -47,11 +51,13 @@ class Simulator {
     log.info("Simulation id=$simulationId");
     log.info(
         "You can view the status and results at http://localhost:8080/status");
+    final nodes = <NodeVM>[];
     try {
       final relays = await launchRelays(simulationId, genesisSettings);
+      nodes.addAll(relays);
       final stakers =
           await launchStakers(simulationId, genesisSettings, relays);
-      final nodes = [...relays, ...stakers];
+      nodes.addAll(stakers);
       log.info("Waiting until genesis");
       await Future.delayed(genesisTime
           .subtract(const Duration(seconds: 10))
@@ -78,34 +84,38 @@ class Simulator {
           "Mission complete. The simulation server will stay alive until manually stopped. View the results at http://localhost:8080/status");
     } finally {
       log.info("Deleting droplets");
-      await deleteSimulationDroplets(digitalOceanToken);
+      await Future.wait(nodes.map((n) => n.delete(gcpClient, gcpProject)));
       log.info("Droplets deleted.");
     }
   }
 
-  Future<List<NodeDroplet>> launchRelays(
+  Future<List<NodeVM>> launchRelays(
       String simulationId, GenesisSettings genesisSettings) async {
     log.info("Launching $relayCount relay droplets");
-    final containers = <NodeDroplet>[];
+    final containers = <NodeVM>[];
     try {
-      for (int i = 0; i < relayCount; i++) {
-        final List<String> peers;
-        if (i == 0) {
-          peers = [];
-        } else if (i == 1) {
-          peers = [containers[0].ip];
-        } else {
-          peers = [containers[i - 1].ip, containers[i - 2].ip];
-        }
-        final container = await NodeDroplet.create(
-          simulationId,
-          i,
-          digitalOceanToken,
-          genesisSettings,
-          -1,
-          peers.map((p) => "$p:9085").toList(),
-        );
-        containers.add(container);
+      final seedVm = await NodeVM.create(
+        simulationId,
+        0,
+        gcpClient,
+        gcpProject,
+        genesisSettings,
+        -1,
+        [],
+      );
+      containers.add(seedVm);
+      if (relayCount > 1) {
+        await Future.wait(List.generate(
+            relayCount - 1,
+            (i) => NodeVM.create(
+                  simulationId,
+                  i + 1,
+                  gcpClient,
+                  gcpProject,
+                  genesisSettings,
+                  -1,
+                  ["${seedVm.ip}:9085"],
+                ).then(containers.add)));
       }
       log.info("Awaiting blockchain API ready");
       for (final container in containers) {
@@ -118,23 +128,25 @@ class Simulator {
     } catch (e, s) {
       log.severe("Failed to launch relays", e, s);
       for (final container in containers) {
-        await deleteDroplet(container.id);
+        await container.delete(gcpClient, gcpProject);
       }
       rethrow;
     }
     return containers;
   }
 
-  Future<List<NodeDroplet>> launchStakers(String simulationId,
-      GenesisSettings genesisSettings, List<NodeDroplet> relays) async {
+  Future<List<NodeVM>> launchStakers(String simulationId,
+      GenesisSettings genesisSettings, List<NodeVM> relays) async {
     log.info("Launching $stakerCount staker droplets");
-    final containerFutures = <Future<NodeDroplet>>[];
+    final containerFutures = <Future<NodeVM>>[];
     for (int i = 0; i < stakerCount; i++) {
+      final nodeIndex = i + relays.length;
       final targetRelay = relays[i % relays.length];
-      containerFutures.add(NodeDroplet.create(
+      containerFutures.add(NodeVM.create(
         simulationId,
-        i,
-        digitalOceanToken,
+        nodeIndex,
+        gcpClient,
+        gcpProject,
         genesisSettings,
         i,
         ["${targetRelay.ip}:9085"],
@@ -144,24 +156,11 @@ class Simulator {
       return Future.wait(containerFutures);
     } catch (e, s) {
       log.severe("Failed to launch stakers", e, s);
-      await Future.wait(containerFutures.map(
-          (f) => f.then((c) => deleteDroplet(c.id)).catchError((_) => {})));
-      Future.wait(relays.map((r) => deleteDroplet(r.id)));
+      await Future.wait(containerFutures.map((f) => f
+          .then((c) => c.delete(gcpClient, gcpProject))
+          .catchError((_) => {})));
       rethrow;
     }
-  }
-
-  Future<void> deleteDroplet(String id) async {
-    final headers = {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer $digitalOceanToken",
-    };
-    final response = await httpClient.delete(
-      Uri.parse("https://api.digitalocean.com/v2/droplets/$id"),
-      headers: headers,
-    );
-    assert(response.statusCode < 300,
-        "Failed to create container. status=${response.statusCode}");
   }
 }
 
@@ -219,10 +218,10 @@ class SimulatorHttpServer {
   }
 }
 
-Stream<AdoptionRecord> recordsStream(List<NodeDroplet> nodes) =>
+Stream<AdoptionRecord> recordsStream(List<NodeVM> nodes) =>
     MergeStream(nodes.map((r) => nodeRecordsStream(r)));
 
-Stream<AdoptionRecord> nodeRecordsStream(NodeDroplet node) =>
+Stream<AdoptionRecord> nodeRecordsStream(NodeVM node) =>
     Stream.value(node.client)
         .asyncExpand((client) => RepeatStream((_) =>
             client.synchronizationTraversal(SynchronizationTraversalReq())))
