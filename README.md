@@ -5,6 +5,9 @@ A utility for launching a temporary testnet of configurable size on DigitalOcean
 - Dart installation
 - A Google account with GCP + Compute Engine enabled
 - Google Cloud CLI
+- A Google Cloud Project
+   - Preferably a separate/dedicated testing project
+   - The project's default network VPC should enable inbound firewall acceptance for TCP ports 8545, 9084, and 9085.
 
 ## Usage
 1. Login to GCP using GCloud CLI: `gcloud auth application-default login`
