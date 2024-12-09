@@ -36,11 +36,13 @@ class Simulator {
         .add(Duration(minutes: 3)); // Give some time for nodes to launch
     final genesisSettings =
         GenesisSettings(timestamp: genesisTime, stakerCount: stakerCount);
+    final nodes = <NodeVM>[];
     final server = SimulatorHttpServer(
       status: () => status,
       adoptions: () => adoptionRecords,
       blocks: () => blockRecords,
       transactions: () => transactionRecords,
+      nodes: () => nodes,
     );
     // No await
     server.run();
@@ -50,7 +52,6 @@ class Simulator {
         "You can view the status and results at http://localhost:8080/status");
     final nodeTerminationTime =
         genesisTime.add(duration).add(Duration(minutes: 3));
-    final nodes = <NodeVM>[];
     try {
       final relays = await launchRelays(
           simulationId, genesisSettings, nodeTerminationTime);
@@ -178,12 +179,14 @@ class SimulatorHttpServer {
   final List<AdoptionRecord> Function() adoptions;
   final List<BlockRecord> Function() blocks;
   final List<TransactionRecord> Function() transactions;
+  final List<NodeVM> Function() nodes;
 
   SimulatorHttpServer({
     required this.status,
     required this.adoptions,
     required this.blocks,
     required this.transactions,
+    required this.nodes,
   });
 
   Future<void> run() async {
@@ -198,6 +201,8 @@ class SimulatorHttpServer {
         response.write(blocksCsv());
       } else if (request.uri.path == "/transactions.csv") {
         response.write(transactionsCsv());
+      } else if (request.uri.path == "/nodes.csv") {
+        response.write(nodesCsv());
       } else {
         response.statusCode = HttpStatus.notFound;
       }
@@ -223,6 +228,13 @@ class SimulatorHttpServer {
     return [
       "transactionId,inputs,outputs",
       ...transactions().map((b) => b.toCsvRow())
+    ].join("\n");
+  }
+
+  String nodesCsv() {
+    return [
+      "id,ip,region",
+      ...nodes().map((b) => "${b.id},${b.ip},${b.region}")
     ].join("\n");
   }
 }
