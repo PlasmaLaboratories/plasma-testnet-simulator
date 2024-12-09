@@ -48,12 +48,15 @@ class Simulator {
     log.info("Simulation id=$simulationId");
     log.info(
         "You can view the status and results at http://localhost:8080/status");
+    final nodeTerminationTime =
+        genesisTime.add(duration).add(Duration(minutes: 3));
     final nodes = <NodeVM>[];
     try {
-      final relays = await launchRelays(simulationId, genesisSettings);
+      final relays = await launchRelays(
+          simulationId, genesisSettings, nodeTerminationTime);
       nodes.addAll(relays);
-      final stakers =
-          await launchStakers(simulationId, genesisSettings, relays);
+      final stakers = await launchStakers(
+          simulationId, genesisSettings, relays, nodeTerminationTime);
       nodes.addAll(stakers);
       log.info("Awaiting blockchain API ready");
       await Future.wait(nodes.map((node) => retryableFuture(
@@ -94,7 +97,10 @@ class Simulator {
   }
 
   Future<List<NodeVM>> launchRelays(
-      String simulationId, GenesisSettings genesisSettings) async {
+    String simulationId,
+    GenesisSettings genesisSettings,
+    DateTime terminationTime,
+  ) async {
     log.info("Launching $relayCount relay droplets");
     final containers = <NodeVM>[];
     try {
@@ -106,6 +112,7 @@ class Simulator {
         genesisSettings,
         -1,
         [],
+        terminationTime,
       );
       containers.add(seedVm);
       if (relayCount > 1) {
@@ -119,6 +126,7 @@ class Simulator {
                   genesisSettings,
                   -1,
                   ["${seedVm.ip}:9085"],
+                  terminationTime,
                 ).then(containers.add)));
       }
     } catch (e, s) {
@@ -131,8 +139,12 @@ class Simulator {
     return containers;
   }
 
-  Future<List<NodeVM>> launchStakers(String simulationId,
-      GenesisSettings genesisSettings, List<NodeVM> relays) async {
+  Future<List<NodeVM>> launchStakers(
+    String simulationId,
+    GenesisSettings genesisSettings,
+    List<NodeVM> relays,
+    DateTime terminationTime,
+  ) async {
     log.info("Launching $stakerCount staker droplets");
     final containerFutures = <Future<NodeVM>>[];
     for (int i = 0; i < stakerCount; i++) {
@@ -146,6 +158,7 @@ class Simulator {
         genesisSettings,
         i,
         ["${targetRelay.ip}:9085"],
+        terminationTime,
       ));
     }
     try {

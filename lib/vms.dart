@@ -26,6 +26,7 @@ class NodeVM {
     GenesisSettings genesisSettings,
     int stakerIndex,
     List<String> peers,
+    DateTime terminationTime,
   ) async {
     final id = "plasma-simulation-node-$simulationId-$index";
     final region = regions[index % regions.length];
@@ -33,42 +34,46 @@ class NodeVM {
     final compute.ComputeApi computeApi = compute.ComputeApi(gcpClient);
     final response = await computeApi.instances.insert(
       compute.Instance(
-        name: id,
-        tags: compute.Tags(items: [vmTag]),
-        machineType: "zones/$region/machineTypes/e2-small",
-        disks: [
-          compute.AttachedDisk(
-            autoDelete: true,
-            boot: true,
-            initializeParams: compute.AttachedDiskInitializeParams(
-              sourceImage: "projects/cos-cloud/global/images/family/cos-stable",
-            ),
-          ),
-        ],
-        networkInterfaces: [
-          compute.NetworkInterface(
-            accessConfigs: [
-              compute.AccessConfig(
-                name: "External NAT",
-                type: "ONE_TO_ONE_NAT",
+          name: id,
+          tags: compute.Tags(items: [vmTag]),
+          machineType: "zones/$region/machineTypes/e2-small",
+          disks: [
+            compute.AttachedDisk(
+              autoDelete: true,
+              boot: true,
+              initializeParams: compute.AttachedDiskInitializeParams(
+                sourceImage:
+                    "projects/cos-cloud/global/images/family/cos-stable",
               ),
-            ],
-            network: "global/networks/default",
-          ),
-        ],
-        metadata: compute.Metadata(
-          items: [
-            compute.MetadataItems(
-              key: "startup-script",
-              value: _createLaunchScript(genesisSettings, stakerIndex, peers),
             ),
-            compute.MetadataItems(
-              key: "logging-enabled",
-              value: "true",
-            )
           ],
-        ),
-      ),
+          networkInterfaces: [
+            compute.NetworkInterface(
+              accessConfigs: [
+                compute.AccessConfig(
+                  name: "External NAT",
+                  type: "ONE_TO_ONE_NAT",
+                ),
+              ],
+              network: "global/networks/default",
+            ),
+          ],
+          metadata: compute.Metadata(
+            items: [
+              compute.MetadataItems(
+                key: "startup-script",
+                value: _createLaunchScript(genesisSettings, stakerIndex, peers),
+              ),
+              compute.MetadataItems(
+                key: "logging-enabled",
+                value: "true",
+              )
+            ],
+          ),
+          scheduling: compute.Scheduling(
+            instanceTerminationAction: "DELETE",
+            terminationTime: terminationTime.toUtc().toIso8601String(),
+          )),
       gcpProject,
       region,
     );
