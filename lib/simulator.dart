@@ -91,9 +91,9 @@ class Simulator {
       log.info(
           "Mission complete. The simulation server will stay alive until manually stopped. View the results at http://localhost:8080/status");
     } finally {
-      log.info("Deleting droplets");
+      log.info("Deleting VMs");
       await Future.wait(nodes.map((n) => n.delete(gcpClient, gcpProject)));
-      log.info("Droplets deleted.");
+      log.info("VMs deleted.");
     }
   }
 
