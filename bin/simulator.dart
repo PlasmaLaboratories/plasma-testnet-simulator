@@ -1,8 +1,7 @@
-import 'dart:io';
-
 import 'package:args/args.dart';
 import 'package:logging/logging.dart';
 import 'package:plasma_testnet_simulator/simulator.dart';
+import 'package:plasma_testnet_simulator/vms.dart';
 
 void main(List<String> args) async {
   Logger.root.level = Level.INFO;
@@ -14,24 +13,29 @@ void main(List<String> args) async {
   final parsedArgs = argParser.parse(args);
   final stakerCount = int.parse(parsedArgs.option("stakers")!);
   final relayCount = int.parse(parsedArgs.option("relays")!);
+  assert(relayCount > 0, "At least one relay is required");
+  assert(stakerCount > 0, "At least one staker is required");
   final duration =
       Duration(milliseconds: int.parse(parsedArgs.option("duration-ms")!));
-  final digitalOceanToken = Platform.environment["DIGITAL_OCEAN_TOKEN"];
-  if (digitalOceanToken == null) {
-    throw ArgumentError(
-        "DIGITAL_OCEAN_TOKEN environment variable is required.");
+  final gcpProject = parsedArgs.option("gcp-project");
+  if (gcpProject == null) {
+    throw ArgumentError("GCP project is required.");
   }
+  final gcpClient = await makeGcpClient();
   final simulator = Simulator(
     stakerCount: stakerCount,
     relayCount: relayCount,
     duration: duration,
-    digitalOceanToken: digitalOceanToken,
+    gcpClient: gcpClient,
+    gcpProject: gcpProject,
   );
   await simulator.run();
 }
 
 ArgParser get argParser {
   final parser = ArgParser();
+  parser.addOption("gcp-project",
+      help: "The GCP project ID for the simulation");
   parser.addOption("stakers",
       help: "The number of staker VMs to launch.", defaultsTo: "1");
   parser.addOption("relays",

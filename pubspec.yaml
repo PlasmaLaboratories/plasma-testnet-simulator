@@ -16,4 +16,6 @@ dependencies:
   plasma_protobuf: ^0.1.5
   grpc: ^4.0.1
   fast_base58: ^0.2.1
+  googleapis_auth: ^1.6.0
+  googleapis: ^13.2.0
 dev_dependencies:

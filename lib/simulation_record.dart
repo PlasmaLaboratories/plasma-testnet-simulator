@@ -1,5 +1,5 @@
 import 'package:plasma_protobuf/plasma_protobuf.dart';
-import 'package:plasma_testnet_simulator/droplets.dart';
+import 'package:plasma_testnet_simulator/vms.dart';
 import 'package:plasma_testnet_simulator/utils.dart';
 
 class AdoptionRecord {
@@ -25,7 +25,7 @@ class AdoptionRecord {
   }
 
   static Future<List<BlockRecord>> blockRecords(
-      List<AdoptionRecord> adoptionRecords, List<NodeDroplet> nodes) async {
+      List<AdoptionRecord> adoptionRecords, List<NodeVM> nodes) async {
     final adoptees = <BlockId, String>{};
     for (final adoptionRecords in adoptionRecords) {
       adoptees[adoptionRecords.blockId] = adoptionRecords.dropletId;
